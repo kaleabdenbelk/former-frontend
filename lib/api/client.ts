@@ -10,6 +10,13 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+/**
+ * Cap on any single backend request. Without this, a hung backend (or a
+ * boot-time session check that never resolves) leaves the UI stuck on its
+ * loading state indefinitely.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 export function apiUrl(path: string) {
   return `${API_URL}${path}`;
 }
@@ -86,14 +93,21 @@ export async function apiFetch<T>(
   init?: RequestInit,
   options?: RequestOptions,
 ): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      signal,
+    });
 
   const contentType = res.headers.get("content-type") ?? "";
   let body: unknown = null;
@@ -105,16 +119,19 @@ export async function apiFetch<T>(
     }
   }
 
-  if (!res.ok) {
-    const message =
-      extractMessage(body) ?? `Request failed with status ${res.status}.`;
-    if (res.status === 401 && options?.auth !== false) {
-      unauthorizedHandler?.();
+    if (!res.ok) {
+      const message =
+        extractMessage(body) ?? `Request failed with status ${res.status}.`;
+      if (res.status === 401 && options?.auth !== false) {
+        unauthorizedHandler?.();
+      }
+      throw new ApiError(res.status, extractCode(body, res.status), message);
     }
-    throw new ApiError(res.status, extractCode(body, res.status), message);
-  }
 
-  return body as T;
+    return body as T;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /** Convenience: JSON request body + method. */

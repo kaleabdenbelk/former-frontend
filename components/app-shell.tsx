@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { ChevronsUpDown, Database, LayoutGrid, Loader2, Settings as SettingsIcon, Table2 } from "lucide-react";
+import { ChevronsUpDown, Database, LayoutGrid, Settings as SettingsIcon, Table2 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   Breadcrumb,
@@ -247,18 +247,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [store.ready, store.user, isAuthRoute, router]);
 
-  if (!store.ready) {
-    return (
-      <div className="grid min-h-dvh place-items-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  // Auth screens render full-bleed without the app chrome.
+  // Auth screens render full-bleed without the app chrome — they need no
+  // backend data, so paint them immediately instead of waiting on the boot.
   if (isAuthRoute) {
     return <>{children}</>;
   }
+
+  // The shell (sidebar, header, breadcrumbs) needs no backend data, so it
+  // renders immediately; only the page content below waits on the store's
+  // boot (pages render their own skeletons while `!store.ready`).
 
   return (
     <SidebarProvider>
