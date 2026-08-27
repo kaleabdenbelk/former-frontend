@@ -36,8 +36,8 @@ export async function signOutRequest(): Promise<void> {
   await apiFetch("/api/auth/sign-out", { method: "POST" }, { auth: false });
 }
 
-export async function getSession(): Promise<BetterAuthSessionResponse> {
-  return apiFetch<BetterAuthSessionResponse>(
+export async function getSession(): Promise<BetterAuthSessionResponse | null> {
+  return apiFetch<BetterAuthSessionResponse | null>(
     "/api/auth/get-session",
     undefined,
     { auth: false },
@@ -46,5 +46,5 @@ export async function getSession(): Promise<BetterAuthSessionResponse> {
 
 export async function currentUser(): Promise<SessionUser | null> {
   const res = await getSession();
-  return res.user;
+  return res?.user ?? null;
 }

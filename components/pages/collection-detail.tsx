@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArchiveRestore, Download, Globe, Inbox, Play, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, Download, Inbox, Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/empty-state";
 import { DataTable, type Column } from "@/components/data-table";
 import { SubmissionSheet } from "@/components/submission-sheet";
 import { CollectionFieldsEditor } from "@/components/collection-fields-editor";
+import { ConnectPanel } from "@/components/connect-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,15 +44,13 @@ import {
   useStore,
 } from "@/lib/store";
 import {
-  buildSnippet,
   displayValue,
   downloadCsv,
   relativeTime,
   slugify,
   toCsv,
 } from "@/lib/format";
-import { addOrigin, listOrigins, removeOrigin } from "@/lib/api/collections";
-import { API_URL, errorMessage } from "@/lib/api/client";
+import { errorMessage } from "@/lib/api/client";
 import type { CollectionStatus, Submission } from "@/lib/types";
 
 export function CollectionDetail() {
@@ -77,23 +76,6 @@ export function CollectionDetail() {
     setName(collection.name);
     setDescription(collection.description ?? "");
   }, [collection]);
-
-  // Allowed origins.
-  const [origins, setOrigins] = useState<string[]>([]);
-  const [originInput, setOriginInput] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    listOrigins(projectId, collectionId)
-      .then((o) => {
-        if (!cancelled) setOrigins(o);
-      })
-      .catch(() => {
-        /* surfaced on the add/remove actions */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, collectionId]);
 
   const subs = useMemo(
     () => collectionSubmissions(store, collectionId),
@@ -143,9 +125,6 @@ export function CollectionDetail() {
     },
   ];
 
-  const endpoint = `${API_URL}/v1/collect/${collection.publicId}`;
-  const snippet = buildSnippet(endpoint, collection.fields);
-
   async function setStatus(status: CollectionStatus, message: string) {
     try {
       await store.updateCollection(collection!.id, { status });
@@ -167,32 +146,6 @@ export function CollectionDetail() {
       toast.error(errorMessage(err));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function addOriginToList() {
-    const value = originInput.trim();
-    if (!value) return;
-    setBusy(true);
-    try {
-      const normalized = await addOrigin(projectId, collectionId, value);
-      setOrigins((o) => [...o, normalized].sort());
-      setOriginInput("");
-      toast.success("Origin allowed");
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeOriginFromList(origin: string) {
-    try {
-      await removeOrigin(projectId, collectionId, origin);
-      setOrigins((o) => o.filter((x) => x !== origin));
-      toast.success("Origin removed");
-    } catch (err) {
-      toast.error(errorMessage(err));
     }
   }
 
@@ -218,6 +171,7 @@ export function CollectionDetail() {
       <Tabs defaultValue="submissions">
         <TabsList>
           <TabsTrigger value="submissions">Submissions</TabsTrigger>
+          <TabsTrigger value="connect">Connect</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -227,7 +181,7 @@ export function CollectionDetail() {
             <EmptyState
               icon={Inbox}
               title="No submissions yet"
-              description="Connect the form from the Settings tab to start receiving data."
+              description="Go to the Connect tab to get the code for your form."
             />
           ) : (
             <DataTable
@@ -287,6 +241,16 @@ export function CollectionDetail() {
           )}
         </TabsContent>
 
+        <TabsContent value="connect" className="mt-4">
+          <ConnectPanel
+            projectId={projectId}
+            collectionId={collectionId}
+            publicId={collection.publicId}
+            collectionName={collection.name}
+            fields={collection.fields}
+          />
+        </TabsContent>
+
         <TabsContent value="overview" className="mt-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Total" value={subs.length} />
@@ -331,98 +295,6 @@ export function CollectionDetail() {
               fields={collection.fields}
               onFieldsChange={(fields) => store.setCollectionFields(collectionId, fields)}
             />
-          </section>
-
-          <section className="space-y-3 rounded-md border border-border bg-card p-4">
-            <div>
-              <h2 className="text-sm font-semibold">Connect it</h2>
-              <p className="text-xs text-muted-foreground">
-                Point any HTML form at this endpoint. Field names below match the keys on each
-                field — a form submits JSON to{" "}
-                <code className="rounded bg-muted px-1">POST /v1/collect/{"{publicId}"}</code>.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="endpoint">Endpoint</Label>
-              <div className="flex gap-2">
-                <Input id="endpoint" readOnly value={endpoint} className="font-mono text-xs" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(endpoint);
-                    toast.success("Endpoint copied");
-                  }}
-                >
-                  Copy
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="snippet">HTML form</Label>
-              <Textarea id="snippet" readOnly rows={12} value={snippet} className="font-mono text-xs" />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void navigator.clipboard.writeText(snippet);
-                  toast.success("Snippet copied");
-                }}
-              >
-                Copy snippet
-              </Button>
-            </div>
-          </section>
-
-          <section className="space-y-3 rounded-md border border-border bg-card p-4">
-            <div className="flex items-center gap-2">
-              <Globe className="size-4" />
-              <h2 className="text-sm font-semibold">Allowed origins</h2>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Allow an exact website origin (e.g.{" "}
-              <code className="rounded bg-muted px-1">https://example.com</code>) to submit from a
-              browser. The browser blocks reading the response unless the origin is listed here.
-              Your site is currently at{" "}
-              <code className="rounded bg-muted px-1">
-                {typeof window !== "undefined" ? window.location.origin : ""}
-              </code>{" "}
-              — for local testing, allow that exact origin, including the port.
-            </p>
-            <div className="flex gap-2">
-              <Input
-                value={originInput}
-                onChange={(e) => setOriginInput(e.target.value)}
-                placeholder="https://example.com"
-                className="font-mono text-xs"
-                aria-label="Origin to allow"
-              />
-              <Button size="sm" variant="outline" disabled={busy || !originInput.trim()} onClick={() => void addOriginToList()}>
-                Add
-              </Button>
-            </div>
-            {origins.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No origins allowed yet — browser submissions are blocked until you add one.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border overflow-hidden rounded-md border border-border">
-                {origins.map((origin) => (
-                  <li key={origin} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <span className="truncate font-mono text-xs">{origin}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6"
-                      aria-label={`Remove ${origin}`}
-                      onClick={() => void removeOriginFromList(origin)}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </section>
 
           <section className="space-y-3 rounded-md border border-destructive/40 p-4">

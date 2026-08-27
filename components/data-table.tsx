@@ -65,7 +65,7 @@ export function DataTable<T>({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let out = rows;
-    if (q && searchText) out = out.filter((r) => searchText(r).toLowerCase().includes(q));
+    if (q && searchText) out = out.filter((r) => (searchText(r) ?? "").toLowerCase().includes(q));
     if (sort) {
       const col = columns.find((c) => c.id === sort.columnId);
       if (col?.sortValue) {
