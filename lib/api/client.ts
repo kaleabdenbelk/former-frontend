@@ -36,8 +36,25 @@ export class ApiError extends Error {
 
 /** Turn an unknown thrown value into a user-safe message. */
 export function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error && err.message) return err.message;
+  // Better Auth / management envelope error with a message.
+  if (err instanceof ApiError) {
+    if (err.status === 500) return "The server hit an unexpected error. Please try again in a moment.";
+    if (err.status === 503) return "The service is temporarily unavailable. Please try again shortly.";
+    if (err.status === 429) return "Too many requests. Please wait a moment and try again.";
+    return err.message;
+  }
+  if (err instanceof Error) {
+    // AbortController timeout.
+    if (err.name === "AbortError" || err.name === "TimeoutError")
+      return "The request took too long — the server may be down. Please try again.";
+    // Fetch network failure (DNS, CORS, offline, backend not running).
+    if (
+      err.name === "TypeError" &&
+      /failed to fetch|network|cors|load/i.test(err.message)
+    )
+      return "Could not reach the server. Make sure it's running and try again.";
+    if (err.message) return err.message;
+  }
   return "Something went wrong. Please try again.";
 }
 

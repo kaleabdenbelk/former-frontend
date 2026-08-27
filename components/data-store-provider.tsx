@@ -165,7 +165,7 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     async (input) => {
       await signInEmail(input);
       const u = await currentUser();
-      if (!u) throw new Error("Signed in, but no session was returned.");
+      if (!u) throw new Error("Signed in, but no session was returned. Please try again.");
       setUser(u);
       await loadAll();
     },
